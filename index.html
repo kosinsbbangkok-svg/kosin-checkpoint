@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#080b11">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="KOSIN จุดตรวจ">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>KOSIN VI FR · จุดตรวจ</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
@@ -37,6 +44,8 @@ label{display:block;font-family:var(--f-mono);font-size:10px;letter-spacing:.16e
 .wm-login::after{content:"";position:absolute;left:50%;bottom:0;width:64px;height:1px;transform:translateX(-50%);background:linear-gradient(90deg,transparent,var(--warn),transparent)}
 .sub{font-family:var(--f-mono);font-size:10px;letter-spacing:.2em;text-align:center;color:var(--muted);margin:14px 0 6px}
 #loginMsg{min-height:20px;margin-top:12px;color:var(--err);font-size:13px}
+.box button.install{width:100%;margin-top:10px}
+.ios-hint{margin-top:12px;font-size:12px;color:var(--muted);line-height:1.5}
 .box button.primary{width:100%;margin-top:18px;padding:11px}
 
 /* run */
@@ -73,6 +82,8 @@ label{display:block;font-family:var(--f-mono);font-size:10px;letter-spacing:.16e
     <input id="code" type="password" autocomplete="off" placeholder="กรอกรหัสผ่าน">
     <button class="primary" id="btnStart" type="button">เริ่มตรวจ</button>
     <div id="loginMsg"></div>
+    <button type="button" id="btnInstall" class="hidden install">ติดตั้งเป็นแอปบนหน้าจอ</button>
+    <div id="iosHint" class="hidden ios-hint">iPhone/iPad: กดปุ่มแชร์ (สี่เหลี่ยมมีลูกศรขึ้น) แล้วเลือก "เพิ่มไปยังหน้าจอโฮม" เพื่อติดตั้งเป็นแอป</div>
   </div>
 </section>
 
@@ -121,7 +132,7 @@ if (!nodeId) { nodeId = "n" + Math.random().toString(36).slice(2, 8); try { loca
 let running = false, stream = null, wakeLock = null, hbTimer = null, geoWatch = null;
 let tracks = [], seq = 0, inflight = 0, lastReported = {}, modelsReady = false;
 let batt = null, chg = false, geo = null, facesNow = 0;
-let peer = null; const calls = new Set();
+let peer = null; const calls = new Set(); const dcs = new Set();
 
 // ======================= เรียก Apps Script =======================
 async function api(action, payload) {
@@ -235,7 +246,7 @@ async function tick() {
     maybeQuery(t, now);
   });
   tracks = tracks.filter((t) => now - t.seen < 3000);
-  draw();
+  draw(); sendBoxes();
   setInfo("ใบหน้าในภาพ: " + facesNow + (batt != null ? " · แบต " + batt + "%" + (chg ? " (ชาร์จ)" : "") : ""));
 }
 
@@ -309,6 +320,15 @@ function draw() {
   });
 }
 
+// ส่งกรอบ/ชื่อไปให้ศูนย์วาดทับภาพสด (ข้อมูลเล็ก ไม่ส่งภาพใบหน้า/เวกเตอร์)
+function sendBoxes() {
+  if (!dcs.size) return;
+  const msg = { t: "f", w: v.videoWidth, h: v.videoHeight, f: tracks.map((t) => ({
+    x: Math.round(t.box.x), y: Math.round(t.box.y), w: Math.round(t.box.width), h: Math.round(t.box.height),
+    s: t.state, l: t.state === "match" ? t.label : "", p: t.sim })) };
+  dcs.forEach((d) => { try { if (d.open) d.send(msg); } catch (_) {} });
+}
+
 // ======================= สถานะจุดตรวจ =======================
 function nodeInfo() { return { id: nodeId, name: nodeName, battery: batt, charging: chg, lat: geo ? geo.latitude : null, lng: geo ? geo.longitude : null, facing }; }
 async function beat() {
@@ -352,7 +372,9 @@ async function onCall(call) {
     if (!r || !r.ok || !stream) { call.close(); return; }   // โทเค็นไม่ถูกต้อง = ไม่ส่งภาพ
     call.answer(stream);
     calls.add(call); updViewer();
-    const gone = () => { calls.delete(call); updViewer(); };
+    let dc = null;
+    try { dc = peer.connect(call.peer, { reliable: false }); dcs.add(dc); dc.on("close", () => dcs.delete(dc)); dc.on("error", () => dcs.delete(dc)); } catch (_) {}
+    const gone = () => { calls.delete(call); if (dc) { dcs.delete(dc); try { dc.close(); } catch (_) {} } updViewer(); };
     call.on("close", gone); call.on("error", gone);
     setTimeout(() => capBitrate(call), 800);
   } catch (e) { try { call.close(); } catch (_) {} }
@@ -376,7 +398,7 @@ function swapTracks() {
 // ======================= หยุด / ออก =======================
 function stopRun() {
   running = false;
-  calls.forEach((c) => { try { c.close(); } catch (_) {} }); calls.clear(); updViewer();
+  calls.forEach((c) => { try { c.close(); } catch (_) {} }); calls.clear(); dcs.clear(); updViewer();
   if (peer) { try { peer.destroy(); } catch (_) {} peer = null; }
   if (hbTimer) { clearInterval(hbTimer); hbTimer = null; }
   if (geoWatch != null) { try { navigator.geolocation.clearWatch(geoWatch); } catch (_) {} geoWatch = null; }
@@ -397,6 +419,18 @@ $("btnFlip").addEventListener("click", async () => {
   facing = facing === "environment" ? "user" : "environment";
   try { await openCamera(); swapTracks(); } catch (e) { setMsg(e.message); }
 });
+
+// ======================= ติดตั้งเป็นแอป (PWA) =======================
+let installEvt = null;
+const isStandalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+if ("serviceWorker" in navigator) { window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); }); }
+window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installEvt = e; if (!isStandalone) $("btnInstall").classList.remove("hidden"); });
+window.addEventListener("appinstalled", () => { installEvt = null; $("btnInstall").classList.add("hidden"); });
+$("btnInstall").addEventListener("click", async () => {
+  if (!installEvt) return;
+  installEvt.prompt(); try { await installEvt.userChoice; } catch (_) {} installEvt = null; $("btnInstall").classList.add("hidden");
+});
+if (!isStandalone && /iphone|ipad|ipod/i.test(navigator.userAgent)) $("iosHint").classList.remove("hidden");
 
 // คืนค่าล่าสุดหลังรีเฟรชหน้า (เก็บรหัสไว้เฉพาะแท็บนี้)
 try {
