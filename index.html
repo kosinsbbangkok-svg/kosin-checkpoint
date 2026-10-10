@@ -50,6 +50,7 @@ label{display:block;font-family:var(--f-mono);font-size:10px;letter-spacing:.16e
 .stage video,.stage canvas{position:absolute;inset:0;width:100%;height:100%}
 .stage video{object-fit:fill}
 .msg{position:absolute;left:0;right:0;bottom:0;padding:6px 10px;font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;background:rgba(5,8,14,.7);color:var(--ink)}
+.viewer{position:absolute;top:8px;right:8px;padding:4px 10px;font-size:12px;font-weight:600;color:#fff;background:rgba(199,90,90,.85);border-radius:999px}
 .bar{display:flex;gap:8px;flex-wrap:wrap;padding:10px 14px}
 .bar .grow{flex:1}
 #info{font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;color:var(--muted);padding:0 14px}
@@ -80,7 +81,7 @@ label{display:block;font-family:var(--f-mono);font-size:10px;letter-spacing:.16e
     <div class="wordmark">KOSIN VI FR</div>
     <div class="node"><div id="nodeLabel"></div><div><span id="dot" class="dot"></span><span id="link">กำลังเริ่ม</span></div></div>
   </div>
-  <div class="stage" id="stage"><video id="v" playsinline muted autoplay></video><canvas id="ov"></canvas><div class="msg" id="msg">กำลังเตรียมระบบ...</div></div>
+  <div class="stage" id="stage"><video id="v" playsinline muted autoplay></video><canvas id="ov"></canvas><div class="msg" id="msg">กำลังเตรียมระบบ...</div><div class="viewer hidden" id="viewer">● มีผู้เปิดดูภาพสดอยู่</div></div>
   <div id="info"></div>
   <div class="bar">
     <button type="button" id="btnFlip">สลับกล้อง</button>
@@ -100,6 +101,11 @@ const MODEL_URLS = [
   "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model/",
   "https://vladmandic.github.io/face-api/model/"
 ];
+// ดูภาพสดจากศูนย์ (WebRTC เชื่อมตรง + PeerJS ฟรี)
+const PEER_CDN = "https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js";
+const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:global.stun.twilio.com:3478" }];
+// ถ้ามีบริการ TURN ฟรี (เช่น Metered Open Relay) ใส่เพิ่มในรายการด้านบน เพื่อให้ต่อได้ในเครือข่ายมือถือที่เชื่อมตรงไม่ได้
+const VIDEO_MAX_BPS = 800000;     // จำกัดบิตเรตวิดีโอที่ส่งให้ศูนย์ (~0.8 Mbps)
 const THRESHOLD = 0.5;            // ค่าเดียวกับระบบหลัก (ยิ่งต่ำยิ่งเข้ม)
 const DETECT_MS = 600;            // ตรวจใบหน้าทุก ~0.6 วินาที
 const HEARTBEAT_MS = 60000;       // ส่งสัญญาณออนไลน์ทุก 60 วินาที
@@ -115,6 +121,7 @@ if (!nodeId) { nodeId = "n" + Math.random().toString(36).slice(2, 8); try { loca
 let running = false, stream = null, wakeLock = null, hbTimer = null, geoWatch = null;
 let tracks = [], seq = 0, inflight = 0, lastReported = {}, modelsReady = false;
 let batt = null, chg = false, geo = null, facesNow = 0;
+let peer = null; const calls = new Set();
 
 // ======================= เรียก Apps Script =======================
 async function api(action, payload) {
@@ -178,6 +185,7 @@ async function startRun() {
   await loadModels();
   await openCamera();
   running = true;
+  initPeer();
   acquireWake(); startGeo(); startBattery();
   beat(); hbTimer = setInterval(beat, HEARTBEAT_MS);
   setMsg("กำลังตรวจ");
@@ -324,9 +332,52 @@ function startGeo() {
 async function acquireWake() { try { if (navigator.wakeLock) wakeLock = await navigator.wakeLock.request("screen"); } catch (_) {} }
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && running) acquireWake(); });
 
+// ======================= ให้ศูนย์ดูภาพสด =======================
+async function initPeer() {
+  try {
+    if (!window.Peer) await loadScript(PEER_CDN);
+    if (peer) { try { peer.destroy(); } catch (_) {} }
+    peer = new Peer("kvfr-" + nodeId, { config: { iceServers: ICE_SERVERS } });
+    peer.on("call", onCall);
+    peer.on("disconnected", () => { if (running && peer && !peer.destroyed) { try { peer.reconnect(); } catch (_) {} } });
+    peer.on("error", (e) => {
+      console.warn("peer", e);
+      if (e.type === "unavailable-id") setInfo("จุดนี้เปิดอยู่ในอีกแท็บ — ปิดแท็บอื่นของจุดนี้ ศูนย์จึงจะดูภาพสดได้");
+    });
+  } catch (e) { console.warn("เริ่มระบบดูภาพสดไม่ได้", e); }
+}
+async function onCall(call) {
+  try {
+    const r = await api("viewauth", { code, node: { id: nodeId }, token: (call.metadata || {}).token });
+    if (!r || !r.ok || !stream) { call.close(); return; }   // โทเค็นไม่ถูกต้อง = ไม่ส่งภาพ
+    call.answer(stream);
+    calls.add(call); updViewer();
+    const gone = () => { calls.delete(call); updViewer(); };
+    call.on("close", gone); call.on("error", gone);
+    setTimeout(() => capBitrate(call), 800);
+  } catch (e) { try { call.close(); } catch (_) {} }
+}
+function capBitrate(call) {
+  try {
+    call.peerConnection.getSenders().forEach((s) => {
+      if (s.track && s.track.kind === "video") {
+        const p = s.getParameters(); if (!p.encodings || !p.encodings.length) p.encodings = [{}];
+        p.encodings[0].maxBitrate = VIDEO_MAX_BPS; s.setParameters(p).catch(() => {});
+      }
+    });
+  } catch (_) {}
+}
+function updViewer() { $("viewer").classList.toggle("hidden", calls.size === 0); }
+function swapTracks() {
+  const nt = stream && stream.getVideoTracks()[0]; if (!nt) return;
+  calls.forEach((c) => { try { c.peerConnection.getSenders().forEach((s) => { if (s.track && s.track.kind === "video") s.replaceTrack(nt); }); } catch (_) {} });
+}
+
 // ======================= หยุด / ออก =======================
 function stopRun() {
   running = false;
+  calls.forEach((c) => { try { c.close(); } catch (_) {} }); calls.clear(); updViewer();
+  if (peer) { try { peer.destroy(); } catch (_) {} peer = null; }
   if (hbTimer) { clearInterval(hbTimer); hbTimer = null; }
   if (geoWatch != null) { try { navigator.geolocation.clearWatch(geoWatch); } catch (_) {} geoWatch = null; }
   if (wakeLock) { try { wakeLock.release(); } catch (_) {} wakeLock = null; }
@@ -344,7 +395,7 @@ $("code").addEventListener("keydown", (e) => { if (e.key === "Enter") doStart();
 $("btnStop").addEventListener("click", () => backToLogin());
 $("btnFlip").addEventListener("click", async () => {
   facing = facing === "environment" ? "user" : "environment";
-  try { await openCamera(); } catch (e) { setMsg(e.message); }
+  try { await openCamera(); swapTracks(); } catch (e) { setMsg(e.message); }
 });
 
 // คืนค่าล่าสุดหลังรีเฟรชหน้า (เก็บรหัสไว้เฉพาะแท็บนี้)
