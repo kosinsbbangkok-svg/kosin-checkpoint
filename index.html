@@ -246,7 +246,7 @@ async function tick() {
     maybeQuery(t, now);
   });
   tracks = tracks.filter((t) => now - t.seen < 3000);
-  draw(); sendBoxes();
+  draw(); sendBoxes(); pushNow();
   setInfo("ใบหน้าในภาพ: " + facesNow + (batt != null ? " · แบต " + batt + "%" + (chg ? " (ชาร์จ)" : "") : ""));
 }
 
@@ -330,7 +330,19 @@ function sendBoxes() {
 }
 
 // ======================= สถานะจุดตรวจ =======================
-function nodeInfo() { return { id: nodeId, name: nodeName, battery: batt, charging: chg, lat: geo ? geo.latitude : null, lng: geo ? geo.longitude : null, facing }; }
+function nowList() { return tracks.map((t) => ({ l: t.state === "match" ? t.label : "", s: t.state === "match" ? "match" : t.state === "unknown" ? "unknown" : "new", p: t.sim || 0 })).slice(0, 6); }
+// อัปเดต "ขณะนี้พบใคร" ไปที่ศูนย์ (ส่งเมื่อมีการเปลี่ยน ห่างอย่างน้อย 4 วินาที / ทบทวนทุก 12 วินาทีถ้ายังมีใบหน้า)
+let lastNowSig = "", lastNowAt = 0;
+function pushNow() {
+  if (!running || !code) return;
+  const now = Date.now(), l = nowList();
+  const sig = l.map((x) => x.s + ":" + x.l).join("|");
+  const changed = sig !== lastNowSig;
+  if (now - lastNowAt < 4000 || (!changed && !(l.length && now - lastNowAt > 12000))) return;
+  lastNowSig = sig; lastNowAt = now;
+  api("heartbeat", { code, node: nodeInfo() }).catch(() => {});
+}
+function nodeInfo() { return { id: nodeId, name: nodeName, battery: batt, charging: chg, lat: geo ? geo.latitude : null, lng: geo ? geo.longitude : null, facing, now: nowList() }; }
 async function beat() {
   try { await api("heartbeat", { code, node: nodeInfo() }); setLink(true, "ออนไลน์ · " + new Date().toLocaleTimeString("th-TH")); }
   catch (e) {
