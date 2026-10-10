@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#080b11">
+<title>KOSIN VI FR · จุดตรวจ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#080b11; --panel:rgba(10,14,22,.85); --ink:#e1e6ed; --accent:#8ea6c2; --muted:rgba(142,166,194,.6);
+  --line:rgba(142,166,194,.25); --ok:#6fae8b; --warn:#c8a550; --err:#c75a5a;
+  --f-body:"Sarabun","Leelawadee UI","Noto Sans Thai",Tahoma,system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",Consolas,monospace; --f-display:"Cinzel","Times New Roman",serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:var(--f-body);font-size:14px;line-height:1.55;background:var(--bg);color:var(--ink);
+  background-image:linear-gradient(rgba(142,166,194,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(142,166,194,.04) 1px,transparent 1px);background-size:40px 40px;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+.hidden{display:none!important}
+.wordmark{font-family:var(--f-display);font-weight:600;letter-spacing:.3em;color:#e9edf3;line-height:1;white-space:nowrap}
+button{font-family:var(--f-body);font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:9px 14px;
+  background:rgba(142,166,194,.06);border:1px solid var(--line);color:var(--ink);cursor:pointer;border-radius:2px}
+button:hover:not(:disabled){border-color:var(--accent);background:rgba(142,166,194,.14)}
+button:disabled{opacity:.5;cursor:default}
+button.primary{background:rgba(142,166,194,.15);border-color:var(--accent);color:#fff}
+input{width:100%;padding:10px 12px;background:rgba(142,166,194,.06);border:1px solid var(--line);color:var(--ink);font-family:var(--f-mono);font-size:14px;letter-spacing:.06em;border-radius:0}
+input:focus{outline:none;border-color:var(--accent)}
+label{display:block;font-family:var(--f-mono);font-size:10px;letter-spacing:.16em;color:var(--muted);margin:14px 0 6px;text-transform:uppercase}
+
+/* login */
+#login{min-height:100%;display:flex;align-items:center;justify-content:center;padding:20px}
+.box{width:100%;max-width:380px;background:var(--panel);border:1px solid var(--line);padding:34px 28px}
+.wm-login{font-size:clamp(1.4rem,6vw,1.9rem);text-align:center;padding:0 0 16px .3em;position:relative;margin-bottom:6px}
+.wm-login::after{content:"";position:absolute;left:50%;bottom:0;width:64px;height:1px;transform:translateX(-50%);background:linear-gradient(90deg,transparent,var(--warn),transparent)}
+.sub{font-family:var(--f-mono);font-size:10px;letter-spacing:.2em;text-align:center;color:var(--muted);margin:14px 0 6px}
+#loginMsg{min-height:20px;margin-top:12px;color:var(--err);font-size:13px}
+.box button.primary{width:100%;margin-top:18px;padding:11px}
+
+/* run */
+#run{min-height:100%;display:flex;flex-direction:column}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:var(--panel);border-bottom:1px solid var(--line)}
+.top .wordmark{font-size:.95rem}
+.node{font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;color:var(--accent);text-align:right;line-height:1.35}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:6px;vertical-align:middle}
+.dot.on{background:var(--ok);box-shadow:0 0 8px var(--ok)} .dot.off{background:var(--err);box-shadow:0 0 8px var(--err)}
+.stage{position:relative;width:100%;background:#000;max-height:68vh;margin:0 auto;aspect-ratio:4/3}
+.stage video,.stage canvas{position:absolute;inset:0;width:100%;height:100%}
+.stage video{object-fit:fill}
+.msg{position:absolute;left:0;right:0;bottom:0;padding:6px 10px;font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;background:rgba(5,8,14,.7);color:var(--ink)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;padding:10px 14px}
+.bar .grow{flex:1}
+#info{font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;color:var(--muted);padding:0 14px}
+#log{padding:8px 14px 18px;font-size:13px}
+#log div{padding:5px 0;border-bottom:1px solid rgba(142,166,194,.1);display:flex;gap:10px;align-items:center}
+#log img{width:34px;height:34px;object-fit:cover;border:1px solid var(--line)}
+#log .t{font-family:var(--f-mono);font-size:10.5px;color:var(--muted)}
+#log .m{color:var(--ok)} #log .u{color:var(--warn)}
+</style>
+</head>
+<body>
+
+<section id="login">
+  <div class="box">
+    <div class="wordmark wm-login" role="img" aria-label="KOSIN VI FR">KOSIN VI FR</div>
+    <div class="sub">CHECKPOINT · จุดตรวจ</div>
+    <label for="nodeName">ชื่อจุดตรวจ</label>
+    <input id="nodeName" type="text" maxlength="60" placeholder="เช่น จุด 3 · หน้าประตูเหนือ" autocomplete="off">
+    <label for="code">รหัสผ่าน</label>
+    <input id="code" type="password" autocomplete="off" placeholder="กรอกรหัสผ่าน">
+    <button class="primary" id="btnStart" type="button">เริ่มตรวจ</button>
+    <div id="loginMsg"></div>
+  </div>
+</section>
+
+<section id="run" class="hidden">
+  <div class="top">
+    <div class="wordmark">KOSIN VI FR</div>
+    <div class="node"><div id="nodeLabel"></div><div><span id="dot" class="dot"></span><span id="link">กำลังเริ่ม</span></div></div>
+  </div>
+  <div class="stage" id="stage"><video id="v" playsinline muted autoplay></video><canvas id="ov"></canvas><div class="msg" id="msg">กำลังเตรียมระบบ...</div></div>
+  <div id="info"></div>
+  <div class="bar">
+    <button type="button" id="btnFlip">สลับกล้อง</button>
+    <span class="grow"></span>
+    <button type="button" id="btnStop">หยุด / ออก</button>
+  </div>
+  <div id="log"></div>
+</section>
+
+<script>
+"use strict";
+// ======================= ตั้งค่า =======================
+// ลิงก์เว็บแอป Apps Script (การทำให้ใช้งานได้ > เว็บแอป > URL ที่ลงท้ายด้วย /exec)
+const API_URL = "https://script.google.com/macros/s/AKfycbzYpeRWRBXwNNwc8TuNW6mvTz979NN6zWXeZ_cY0IasihqQvYrOWTzfBTK3u6uKzd0z/exec";
+const CDN_LIB = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/dist/face-api.js";
+const MODEL_URLS = [
+  "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model/",
+  "https://vladmandic.github.io/face-api/model/"
+];
+const THRESHOLD = 0.5;            // ค่าเดียวกับระบบหลัก (ยิ่งต่ำยิ่งเข้ม)
+const DETECT_MS = 600;            // ตรวจใบหน้าทุก ~0.6 วินาที
+const HEARTBEAT_MS = 60000;       // ส่งสัญญาณออนไลน์ทุก 60 วินาที
+const MIN_FACE_PX = 70;           // ใบหน้าเล็กกว่านี้ยังไม่ส่งไปเทียบ
+const REPORT_COOLDOWN_MS = 60000; // คนเดิมรายงานซ้ำไม่เกินนาทีละครั้ง
+
+const $ = (id) => document.getElementById(id);
+const v = $("v"), ov = $("ov"), ctx = ov.getContext("2d");
+let code = "", nodeName = "", facing = "environment";
+let nodeId = "";
+try { nodeId = localStorage.getItem("kv_cp_id") || ""; } catch (_) {}
+if (!nodeId) { nodeId = "n" + Math.random().toString(36).slice(2, 8); try { localStorage.setItem("kv_cp_id", nodeId); } catch (_) {} }
+let running = false, stream = null, wakeLock = null, hbTimer = null, geoWatch = null;
+let tracks = [], seq = 0, inflight = 0, lastReported = {}, modelsReady = false;
+let batt = null, chg = false, geo = null, facesNow = 0;
+
+// ======================= เรียก Apps Script =======================
+async function api(action, payload) {
+  const r = await fetch(API_URL, {
+    method: "POST", redirect: "follow",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },   // ไม่ใช้ preflight (CORS)
+    body: JSON.stringify(Object.assign({ action }, payload || {}))
+  });
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error || "เกิดข้อผิดพลาด");
+  return j.data;
+}
+
+// ======================= โหลดไลบรารี/โมเดล =======================
+function loadScript(src) {
+  return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = () => rej(new Error("โหลดไลบรารีไม่ได้")); document.head.appendChild(s); });
+}
+async function loadModels() {
+  if (modelsReady) return;
+  if (!window.faceapi) await loadScript(CDN_LIB);
+  let ok = false;
+  for (const url of MODEL_URLS) {
+    try {
+      await faceapi.nets.ssdMobilenetv1.loadFromUri(url);
+      await faceapi.nets.faceLandmark68Net.loadFromUri(url);
+      await faceapi.nets.faceRecognitionNet.loadFromUri(url);
+      ok = true; break;
+    } catch (e) { console.warn("โหลดโมเดลไม่ได้:", url, e); }
+  }
+  if (!ok) throw new Error("โหลดโมเดลตรวจใบหน้าไม่ได้");
+  modelsReady = true;
+}
+
+// ======================= เข้าสู่ระบบ / เริ่ม =======================
+async function doStart(auto) {
+  const c = $("code").value.trim(), n = $("nodeName").value.trim();
+  if (!n) { $("loginMsg").textContent = "กรุณาตั้งชื่อจุดตรวจ"; return; }
+  if (!c) { $("loginMsg").textContent = "กรุณากรอกรหัสผ่าน"; return; }
+  $("btnStart").disabled = true; $("loginMsg").textContent = "";
+  try {
+    await api("login", { code: c });
+    code = c; nodeName = n;
+    try { sessionStorage.setItem("kv_cp_code", c); localStorage.setItem("kv_cp_name", n); } catch (_) {}
+    $("code").value = "";
+    $("login").classList.add("hidden"); $("run").classList.remove("hidden");
+    $("nodeLabel").textContent = nodeName;
+    await startRun();
+  } catch (e) {
+    $("loginMsg").textContent = e.message;
+    try { sessionStorage.removeItem("kv_cp_code"); } catch (_) {}
+    if (!$("run").classList.contains("hidden")) backToLogin();
+  } finally { $("btnStart").disabled = false; }
+}
+
+function setMsg(t) { $("msg").textContent = t; }
+function setInfo(t) { $("info").textContent = t; }
+function setLink(on, text) { $("dot").className = "dot " + (on ? "on" : "off"); $("link").textContent = text || (on ? "ออนไลน์" : "ขาดการเชื่อมต่อ"); }
+
+async function startRun() {
+  setLink(false, "กำลังเริ่ม"); setMsg("กำลังโหลดโมเดลตรวจใบหน้า (ครั้งแรกอาจใช้ 10-30 วินาที)...");
+  await loadModels();
+  await openCamera();
+  running = true;
+  acquireWake(); startGeo(); startBattery();
+  beat(); hbTimer = setInterval(beat, HEARTBEAT_MS);
+  setMsg("กำลังตรวจ");
+  loop();
+}
+
+async function openCamera() {
+  stopStream();
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("เบราว์เซอร์นี้ไม่รองรับกล้อง (ต้องเปิดผ่าน HTTPS)");
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+  } catch (e) {
+    throw new Error(e.name === "NotAllowedError" ? "ไม่ได้รับอนุญาตให้ใช้กล้อง — กรุณาอนุญาตในเบราว์เซอร์" : "เปิดกล้องไม่ได้: " + (e.message || e.name));
+  }
+  v.srcObject = stream; await v.play();
+  await new Promise((r) => (v.videoWidth ? r() : (v.onloadedmetadata = r)));
+  ov.width = v.videoWidth; ov.height = v.videoHeight;
+  $("stage").style.aspectRatio = v.videoWidth + " / " + v.videoHeight;
+}
+function stopStream() { if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; } v.srcObject = null; }
+
+// ======================= วนตรวจใบหน้า =======================
+async function loop() {
+  if (!running) return;
+  const t0 = performance.now();
+  try { await tick(); } catch (e) { setInfo("ตรวจใบหน้าผิดพลาด: " + e.message); }
+  setTimeout(loop, Math.max(100, DETECT_MS - (performance.now() - t0)));
+}
+
+async function tick() {
+  if (!v.videoWidth || v.paused) return;
+  const dets = await faceapi.detectAllFaces(v, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 })).withFaceLandmarks().withFaceDescriptors();
+  const now = Date.now(), used = new Set();
+  facesNow = dets.length;
+  dets.forEach((d) => {
+    const b = d.detection.box, cx = b.x + b.width / 2, cy = b.y + b.height / 2;
+    let best = null, bd = 1e9;
+    tracks.forEach((t) => {
+      if (used.has(t)) return;
+      const dd = Math.hypot(t.cx - cx, t.cy - cy);
+      if (dd < bd && dd < Math.max(b.width, t.w) * 0.8) { bd = dd; best = t; }
+    });
+    let t = best;
+    if (!t) { t = { id: ++seq, state: "new", tries: 0, label: "", sim: 0, lastQ: 0, retryAfter: 0, inflight: false }; tracks.push(t); }
+    used.add(t);
+    Object.assign(t, { cx, cy, w: b.width, h: b.height, box: { x: b.x, y: b.y, width: b.width, height: b.height }, seen: now, desc: Array.from(d.descriptor) });
+    maybeQuery(t, now);
+  });
+  tracks = tracks.filter((t) => now - t.seen < 3000);
+  draw();
+  setInfo("ใบหน้าในภาพ: " + facesNow + (batt != null ? " · แบต " + batt + "%" + (chg ? " (ชาร์จ)" : "") : ""));
+}
+
+function sim(d) { return Math.round(Math.max(0, Math.min(1, 1 - d)) * 100); }
+
+function maybeQuery(t, now) {
+  if (t.inflight || t.w < MIN_FACE_PX || now < t.retryAfter || inflight >= 2) return;
+  if (t.state === "match") return;
+  if (t.state === "unknown" && (t.tries >= 3 || now - t.lastQ < 4000)) return;
+  t.inflight = true; inflight++; t.lastQ = now; t.tries++;
+  if (t.state === "new") t.state = "pending";
+  api("identify", { code, descriptors: [t.desc], threshold: THRESHOLD, writeLog: false })
+    .then((res) => {
+      const c = res.results[0].candidates[0];
+      if (c.distance <= THRESHOLD) { t.state = "match"; t.label = c.name; t.sim = sim(c.distance); report(t, "match", c); }
+      else { t.state = "unknown"; t.label = "ไม่รู้จัก"; t.sim = 0; if (t.tries >= 2) report(t, "unknown", null); }
+    })
+    .catch((e) => {
+      if (t.state === "pending") t.state = "new";
+      t.retryAfter = Date.now() + 8000;
+      if (/รหัสผ่านไม่ถูกต้อง/.test(e.message)) { backToLogin("รหัสผ่านไม่ถูกต้องหรือถูกเปลี่ยน กรุณาเข้าสู่ระบบใหม่"); return; }
+      setInfo("เชื่อมต่อศูนย์ไม่ได้: " + e.message);
+    })
+    .finally(() => { t.inflight = false; inflight--; });
+}
+
+// ======================= รายงานเหตุการณ์ =======================
+function thumbOf(t) {
+  const c = document.createElement("canvas"); c.width = c.height = 80;
+  const pad = t.w * 0.25, sx = Math.max(0, t.box.x - pad), sy = Math.max(0, t.box.y - pad);
+  const s = Math.min(v.videoWidth - sx, v.videoHeight - sy, t.w + pad * 2);
+  c.getContext("2d").drawImage(v, sx, sy, s, s, 0, 0, 80, 80);
+  return c.toDataURL("image/jpeg", 0.55);
+}
+function report(t, kind, c) {
+  const now = Date.now();
+  if (kind === "match") {
+    if (now - (lastReported[c.id] || 0) < REPORT_COOLDOWN_MS) return;
+    lastReported[c.id] = now;
+  } else {
+    if (t.reportedUnknown || now - (lastReported.unk || 0) < 15000) return;
+    lastReported.unk = now; t.reportedUnknown = true;
+  }
+  const ev = { kind, id: c ? c.id : "", name: c ? c.name : "", score: c ? sim(c.distance) : 0, thumb: thumbOf(t) };
+  api("event", { code, node: nodeInfo(), ev })
+    .then(() => addLog(ev))
+    .catch((e) => { setInfo("ส่งเหตุการณ์ไม่สำเร็จ: " + e.message); if (kind === "match") delete lastReported[c.id]; });
+}
+function addLog(ev) {
+  const row = document.createElement("div");
+  const img = document.createElement("img"); img.src = ev.thumb; img.alt = "";
+  const txt = document.createElement("span"); txt.className = ev.kind === "match" ? "m" : "u";
+  txt.textContent = ev.kind === "match" ? ev.name + " · " + ev.score + "%" : "ไม่รู้จัก";
+  const tm = document.createElement("span"); tm.className = "t"; tm.textContent = new Date().toLocaleTimeString("th-TH");
+  row.append(img, txt, tm);
+  const log = $("log"); log.prepend(row); while (log.children.length > 12) log.lastChild.remove();
+}
+
+// ======================= วาดกรอบ =======================
+function draw() {
+  ctx.clearRect(0, 0, ov.width, ov.height);
+  const fs = Math.max(14, Math.round(ov.width / 42));
+  ctx.lineWidth = Math.max(2, Math.round(ov.width / 300)); ctx.font = "600 " + fs + 'px Sarabun, sans-serif'; ctx.textBaseline = "top";
+  tracks.forEach((t) => {
+    const col = t.state === "match" ? "#6fae8b" : t.state === "unknown" ? "#9aa8ba" : "#c8a550";
+    ctx.strokeStyle = col; ctx.strokeRect(t.box.x, t.box.y, t.box.width, t.box.height);
+    const text = t.state === "match" ? t.label + " · " + t.sim + "%" : t.state === "unknown" ? "ไม่รู้จัก" : "กำลังตรวจ...";
+    const w = ctx.measureText(text).width + 12, h = fs + 8, y = Math.max(0, t.box.y - h);
+    ctx.fillStyle = "rgba(5,8,14,.82)"; ctx.fillRect(t.box.x, y, w, h);
+    ctx.fillStyle = col; ctx.fillText(text, t.box.x + 6, y + 4);
+  });
+}
+
+// ======================= สถานะจุดตรวจ =======================
+function nodeInfo() { return { id: nodeId, name: nodeName, battery: batt, charging: chg, lat: geo ? geo.latitude : null, lng: geo ? geo.longitude : null, facing }; }
+async function beat() {
+  try { await api("heartbeat", { code, node: nodeInfo() }); setLink(true, "ออนไลน์ · " + new Date().toLocaleTimeString("th-TH")); }
+  catch (e) {
+    if (/รหัสผ่านไม่ถูกต้อง/.test(e.message)) { backToLogin("รหัสผ่านไม่ถูกต้องหรือถูกเปลี่ยน กรุณาเข้าสู่ระบบใหม่"); return; }
+    setLink(false, "ขาดการเชื่อมต่อ");
+  }
+}
+function startBattery() {
+  if (!navigator.getBattery) return;
+  navigator.getBattery().then((b) => {
+    const up = () => { batt = Math.round(b.level * 100); chg = b.charging; };
+    up(); b.addEventListener("levelchange", up); b.addEventListener("chargingchange", up);
+  }).catch(() => {});
+}
+function startGeo() {
+  if (!navigator.geolocation || geoWatch != null) return;
+  try { geoWatch = navigator.geolocation.watchPosition((p) => { geo = p.coords; }, () => {}, { maximumAge: 60000, timeout: 20000 }); } catch (_) {}
+}
+async function acquireWake() { try { if (navigator.wakeLock) wakeLock = await navigator.wakeLock.request("screen"); } catch (_) {} }
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && running) acquireWake(); });
+
+// ======================= หยุด / ออก =======================
+function stopRun() {
+  running = false;
+  if (hbTimer) { clearInterval(hbTimer); hbTimer = null; }
+  if (geoWatch != null) { try { navigator.geolocation.clearWatch(geoWatch); } catch (_) {} geoWatch = null; }
+  if (wakeLock) { try { wakeLock.release(); } catch (_) {} wakeLock = null; }
+  stopStream(); tracks = []; ctx.clearRect(0, 0, ov.width, ov.height);
+}
+function backToLogin(msg) {
+  stopRun();
+  try { sessionStorage.removeItem("kv_cp_code"); } catch (_) {}
+  code = ""; $("run").classList.add("hidden"); $("login").classList.remove("hidden");
+  $("loginMsg").textContent = msg || "";
+}
+
+$("btnStart").addEventListener("click", () => doStart());
+$("code").addEventListener("keydown", (e) => { if (e.key === "Enter") doStart(); });
+$("btnStop").addEventListener("click", () => backToLogin());
+$("btnFlip").addEventListener("click", async () => {
+  facing = facing === "environment" ? "user" : "environment";
+  try { await openCamera(); } catch (e) { setMsg(e.message); }
+});
+
+// คืนค่าล่าสุดหลังรีเฟรชหน้า (เก็บรหัสไว้เฉพาะแท็บนี้)
+try {
+  const n = localStorage.getItem("kv_cp_name"); if (n) $("nodeName").value = n;
+  const s = sessionStorage.getItem("kv_cp_code"); if (s && n) { $("code").value = s; doStart(true); }
+} catch (_) {}
+</script>
+</body>
+</html>
